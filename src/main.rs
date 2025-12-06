@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "awful_text_news",
             event_kind = "application.failed",
             reason = "directory_not_writable",
-            path = %args.json_output_dir,
+            path = args.json_output_dir.clone(),
             "Application failed: output directory not writable"
         );
         return Err(e);
@@ -353,7 +353,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         publish_error!(
             "awful_text_news",
             event_kind = "output.markdown.failed",
-            path = %output_markdown_filename,
+            path = output_markdown_filename.clone(),
             "Failed to write Markdown output"
         );
     } else {
@@ -361,7 +361,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         publish_info!(
             "awful_text_news",
             event_kind = "output.markdown.completed",
-            path = %output_markdown_filename,
+            path = output_markdown_filename.clone(),
             "Markdown output written successfully"
         );
     }
@@ -414,8 +414,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         duration_millis = elapsed.subsec_millis(),
         articles_processed = successful_count,
         articles_failed = failed_count,
-        edition = %front_page.time_of_day,
-        date = %front_page.local_date,
+        edition = front_page.time_of_day.clone(),
+        date = front_page.local_date.clone(),
         "Application completed successfully"
     );
 

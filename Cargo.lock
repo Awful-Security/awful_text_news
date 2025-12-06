@@ -428,7 +428,7 @@ dependencies = [
 [[package]]
 name = "awful_publish"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Awful-Security/awful_publish.git#87aa07f5be33194b4f7e39c453bbbb51bca83014"
+source = "git+ssh://git@github.com/Awful-Security/awful_publish.git#59af4e4cb9041cd01fe3688eb4b2de38d5960667"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2279,7 +2279,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.1",
+ "socket2 0.5.9",
  "system-configuration",
  "tokio",
  "tower-service",

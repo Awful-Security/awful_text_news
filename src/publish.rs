@@ -13,6 +13,13 @@
 //! macros expand to either real publishing calls or empty blocks depending on the
 //! feature flag.
 //!
+//! # Non-Intrusive Design
+//!
+//! This module uses `awful_publish::init_global()` for initialization and
+//! `awful_publish::publish()` for sending events. The `publish()` function
+//! sends events directly to RabbitMQ without going through the tracing subscriber,
+//! ensuring no interference with the application's existing logging setup.
+//!
 //! # Events Published
 //!
 //! When enabled, the application publishes the following events:
@@ -67,8 +74,8 @@
 
 /// Initialize the message bus connection.
 ///
-/// Connects to an AMQP broker (e.g., RabbitMQ) and configures the global
-/// publisher for subsequent event publishing.
+/// Connects to an AMQP broker (e.g., RabbitMQ) and starts the background
+/// publisher task.
 ///
 /// # Arguments
 ///
@@ -91,8 +98,8 @@ pub async fn init(amqp_url: Option<&String>, exchange: &str) -> bool {
     use tracing::{info, warn};
 
     if let Some(url) = amqp_url {
-        let bus_config = BusConfig::new(url.clone(), exchange.to_string());
-        if let Err(e) = awful_publish::init_global(bus_config).await {
+        let config = BusConfig::new(url.clone(), exchange.to_string());
+        if let Err(e) = awful_publish::init_global(config).await {
             warn!(error = %e, "Failed to initialize message bus; continuing without event publishing");
             false
         } else {
@@ -112,13 +119,22 @@ pub async fn init(_amqp_url: Option<&String>, _exchange: &str) -> bool {
 
 /// Publish an info-level event to the message bus.
 ///
-/// This macro forwards to `awful_publish::info!` when the `publish` feature
+/// This macro calls `awful_publish::publish()` directly when the `publish` feature
 /// is enabled. When disabled, it expands to an empty block.
+///
+/// # Syntax
+///
+/// Uses tracing-style syntax with `field = value` pairs followed by a message literal:
+///
+/// ```ignore
+/// publish_info!(service, field1 = value1, field2 = value2, "message");
+/// ```
 ///
 /// # Arguments
 ///
-/// * `$source` - The source identifier (e.g., `"awful_text_news"`)
-/// * `$($arg)*` - Key-value pairs and message, following `tracing` syntax
+/// * `$service` - The service identifier (e.g., `"awful_text_news"`)
+/// * `$key = $value` - Key-value pairs for event fields (supports dotted keys like `foo.bar`)
+/// * `$msg` - The event message (must be a string literal)
 ///
 /// # Example
 ///
@@ -133,8 +149,23 @@ pub async fn init(_amqp_url: Option<&String>, _exchange: &str) -> bool {
 #[cfg(feature = "publish")]
 #[macro_export]
 macro_rules! publish_info {
-    ($source:expr, $($arg:tt)*) => {
-        awful_publish::info!($source, $($arg)*)
+    ($service:expr, $($($k:ident).+ = $val:expr),+ , $msg:literal) => {
+        awful_publish::publish(
+            $service,
+            tracing::Level::INFO,
+            $msg,
+            vec![$(
+                (stringify!($($k).+), serde_json::json!($val)),
+            )+],
+        )
+    };
+    ($service:expr, $msg:literal) => {
+        awful_publish::publish(
+            $service,
+            tracing::Level::INFO,
+            $msg,
+            vec![],
+        )
     };
 }
 
@@ -142,18 +173,27 @@ macro_rules! publish_info {
 #[cfg(not(feature = "publish"))]
 #[macro_export]
 macro_rules! publish_info {
-    ($source:expr, $($arg:tt)*) => {};
+    ($service:expr, $($tt:tt)*) => {};
 }
 
 /// Publish an error-level event to the message bus.
 ///
-/// This macro forwards to `awful_publish::error!` when the `publish` feature
+/// This macro calls `awful_publish::publish()` directly when the `publish` feature
 /// is enabled. When disabled, it expands to an empty block.
+///
+/// # Syntax
+///
+/// Uses tracing-style syntax with `field = value` pairs followed by a message literal:
+///
+/// ```ignore
+/// publish_error!(service, field1 = value1, field2 = value2, "message");
+/// ```
 ///
 /// # Arguments
 ///
-/// * `$source` - The source identifier (e.g., `"awful_text_news"`)
-/// * `$($arg)*` - Key-value pairs and message, following `tracing` syntax
+/// * `$service` - The service identifier (e.g., `"awful_text_news"`)
+/// * `$key = $value` - Key-value pairs for event fields (supports dotted keys like `foo.bar`)
+/// * `$msg` - The event message (must be a string literal)
 ///
 /// # Example
 ///
@@ -168,8 +208,23 @@ macro_rules! publish_info {
 #[cfg(feature = "publish")]
 #[macro_export]
 macro_rules! publish_error {
-    ($source:expr, $($arg:tt)*) => {
-        awful_publish::error!($source, $($arg)*)
+    ($service:expr, $($($k:ident).+ = $val:expr),+ , $msg:literal) => {
+        awful_publish::publish(
+            $service,
+            tracing::Level::ERROR,
+            $msg,
+            vec![$(
+                (stringify!($($k).+), serde_json::json!($val)),
+            )+],
+        )
+    };
+    ($service:expr, $msg:literal) => {
+        awful_publish::publish(
+            $service,
+            tracing::Level::ERROR,
+            $msg,
+            vec![],
+        )
     };
 }
 
@@ -177,10 +232,10 @@ macro_rules! publish_error {
 #[cfg(not(feature = "publish"))]
 #[macro_export]
 macro_rules! publish_error {
-    ($source:expr, $($arg:tt)*) => {};
+    ($service:expr, $($tt:tt)*) => {};
 }
 
-// Re-export macros at module level for convenience
+// Re-export macros at module level
 #[allow(unused_imports)]
 pub use publish_error;
 #[allow(unused_imports)]
