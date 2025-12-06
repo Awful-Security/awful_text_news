@@ -1,3 +1,20 @@
+//! BBC News article scraper.
+//!
+//! This module scrapes articles from [BBC News](https://www.bbc.com/news).
+//! It focuses on the homepage to get the most prominent current stories.
+//!
+//! # URL Pattern
+//!
+//! BBC News article URLs follow the pattern:
+//! `https://www.bbc.com/news/articles/<article-id>`
+//!
+//! # Discovery Strategy
+//!
+//! Uses multiple fallback strategies:
+//! 1. Links with `data-testid="internal-link"` attribute
+//! 2. Any anchor links matching the article URL pattern
+//! 3. Regex fallback on raw HTML
+
 use crate::models::NewsArticle;
 use futures::stream::{self, StreamExt};
 use once_cell::sync::Lazy;
@@ -7,11 +24,10 @@ use std::error::Error;
 use std::time::Duration;
 use tracing::{debug, error, info, instrument, warn};
 
-// --- New: date parsing helpers
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 
-// (Optional) You can add default headers here if needed; UA + timeouts are already set.
+/// Global HTTP client with browser-like User-Agent and sensible timeouts.
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     Client::builder()
         .user_agent(concat!(

@@ -1,3 +1,13 @@
+//! NPR Text article scraper.
+//!
+//! This module scrapes articles from [NPR Text](https://text.npr.org), a text-only
+//! version of NPR designed for accessibility and low-bandwidth connections.
+//!
+//! # URL Pattern
+//!
+//! Articles are linked from the homepage via `.topic-title` elements,
+//! resolved to URLs like `https://text.npr.org/1234567890`.
+
 use crate::models::NewsArticle;
 use futures::stream::{self, StreamExt};
 use reqwest::get;
@@ -6,7 +16,14 @@ use std::error::Error;
 use tracing::{debug, error, info, instrument, warn};
 use url::Url;
 
-/// Index NPR Text homepage to extract article URLs
+/// Index NPR Text homepage to extract article URLs.
+///
+/// Scrapes the NPR Text homepage and extracts all article links from elements
+/// matching `.topic-title[href]`.
+///
+/// # Returns
+///
+/// A vector of absolute article URLs, or an error if the homepage fetch fails.
 #[instrument(level = "info")]
 pub async fn index_articles() -> Result<Vec<String>, Box<dyn Error>> {
     let npr_page_url = "https://text.npr.org";
@@ -35,7 +52,18 @@ pub async fn index_articles() -> Result<Vec<String>, Box<dyn Error>> {
     Ok(article_urls)
 }
 
-/// Fetch all NPR articles concurrently
+/// Fetch all NPR articles concurrently.
+///
+/// Downloads and parses article content from each URL. Failed fetches are
+/// logged and skipped without failing the entire batch.
+///
+/// # Arguments
+///
+/// * `urls` - Vector of article URLs to fetch
+///
+/// # Returns
+///
+/// A vector of successfully fetched [`NewsArticle`] objects.
 #[instrument(level = "info", skip_all)]
 pub async fn fetch_articles(urls: Vec<String>) -> Vec<NewsArticle> {
     let articles: Vec<NewsArticle> = stream::iter(urls.clone())

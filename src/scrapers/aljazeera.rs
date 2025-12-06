@@ -1,3 +1,21 @@
+//! Al Jazeera article scraper.
+//!
+//! This module scrapes articles from [Al Jazeera](https://www.aljazeera.com),
+//! pulling from multiple sections to get a diverse set of news stories.
+//!
+//! # Sections Scraped
+//!
+//! - Climate Crisis (`/climate-crisis`)
+//! - Science & Technology (`/tag/science-and-technology/`)
+//! - General News (`/news/`)
+//!
+//! # Discovery Strategy
+//!
+//! Uses multiple fallback strategies to find article links:
+//! 1. CSS selectors for article card links
+//! 2. JSON-LD ItemList parsing
+//! 3. Regex fallback for date-patterned URLs
+
 use crate::models::NewsArticle;
 use futures::stream::{self, StreamExt};
 use once_cell::sync::Lazy;
@@ -7,11 +25,10 @@ use std::error::Error;
 use std::time::Duration;
 use tracing::{debug, error, info, instrument, warn};
 
-// --- New: date parsing helpers
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 
-// (Optional) You can add default headers here if needed; UA + timeouts are already set.
+/// Global HTTP client with browser-like User-Agent and sensible timeouts.
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     Client::builder()
         .user_agent(concat!(

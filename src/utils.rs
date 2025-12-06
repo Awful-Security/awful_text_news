@@ -1,10 +1,28 @@
+//! Utility functions for time classification, string manipulation, and file system operations.
+//!
+//! This module provides helper functions used throughout the application:
+//! - Time classification for edition naming
+//! - String truncation and slugification for logging and URLs
+//! - JSON error detection for handling LLM response truncation
+//! - File system validation for output directories
+
 use chrono::{Local, NaiveTime};
 use std::error::Error;
 use std::fs as stdfs;
 use tokio::fs;
 use tracing::{info, instrument, warn};
 
-/// Classify current time into morning/afternoon/evening
+/// Classify current time into morning, afternoon, or evening.
+///
+/// This function is used to determine the "edition" name for news output.
+/// The time boundaries are:
+/// - **Morning**: 00:00 - 08:00
+/// - **Afternoon**: 08:00 - 16:00
+/// - **Evening**: 16:00 - 24:00
+///
+/// # Returns
+///
+/// A string: `"morning"`, `"afternoon"`, or `"evening"`.
 #[instrument]
 pub fn time_of_day() -> String {
     let morning_low = NaiveTime::from_hms_opt(0, 00, 0).unwrap();
@@ -24,7 +42,27 @@ pub fn time_of_day() -> String {
     which.to_string()
 }
 
-/// Truncate a string for logging purposes
+/// Truncate a string for logging purposes.
+///
+/// Long strings are truncated to `max` characters with an ellipsis and
+/// byte count indicator appended.
+///
+/// # Arguments
+///
+/// * `s` - The string to potentially truncate
+/// * `max` - Maximum number of characters to keep
+///
+/// # Returns
+///
+/// The original string if shorter than `max`, otherwise a truncated version
+/// with `"…(+N bytes)"` appended.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_eq!(truncate_for_log("short", 100), "short");
+/// assert_eq!(truncate_for_log("a".repeat(500), 10), "aaaaaaaaaa…(+490 bytes)");
+/// ```
 pub fn truncate_for_log(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
@@ -33,13 +71,44 @@ pub fn truncate_for_log(s: &str, max: usize) -> String {
     }
 }
 
-/// Classify serde_json error category to detect truncation/EOF.
+/// Detect if a serde_json error indicates truncated/incomplete JSON.
+///
+/// When the LLM response is cut off (e.g., due to token limits), the
+/// resulting JSON will fail to parse with an EOF error. This function
+/// helps identify such cases for retry logic.
+///
+/// # Arguments
+///
+/// * `e` - The serde_json error to classify
+///
+/// # Returns
+///
+/// `true` if the error is an EOF (end-of-file) error, indicating truncation.
 pub fn looks_truncated(e: &serde_json::Error) -> bool {
     use serde_json::error::Category;
     matches!(e.classify(), Category::Eof)
 }
 
-/// Convert title to URL-friendly slug
+/// Convert a title to a URL-friendly slug.
+///
+/// This function is used to generate anchor links for Markdown output.
+/// It lowercases the text, removes special characters, and replaces
+/// spaces with hyphens.
+///
+/// # Arguments
+///
+/// * `title` - The title to slugify
+///
+/// # Returns
+///
+/// A lowercase, hyphenated, URL-safe string.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_eq!(slugify_title("Hello World"), "hello-world");
+/// assert_eq!(slugify_title("Test-Article!"), "test-article");
+/// ```
 pub fn slugify_title(title: &str) -> String {
     title
         .to_lowercase()
@@ -47,7 +116,24 @@ pub fn slugify_title(title: &str) -> String {
         .replace(' ', "-")
 }
 
-/// Capitalize first character of a string
+/// Capitalize the first character of a string.
+///
+/// Used primarily for formatting edition names (e.g., "morning" -> "Morning").
+///
+/// # Arguments
+///
+/// * `s` - The string to capitalize
+///
+/// # Returns
+///
+/// The string with its first character converted to uppercase.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_eq!(upcase("hello"), "Hello");
+/// assert_eq!(upcase(""), "");
+/// ```
 pub fn upcase(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
@@ -56,7 +142,25 @@ pub fn upcase(s: &str) -> String {
     }
 }
 
-/// Ensure a directory exists and is writable (create + touch + delete).
+/// Ensure a directory exists and is writable.
+///
+/// This function creates the directory if it doesn't exist, then performs
+/// a write test by creating and immediately deleting a probe file.
+///
+/// # Arguments
+///
+/// * `path` - The directory path to validate
+///
+/// # Returns
+///
+/// `Ok(())` if the directory exists and is writable, or an error describing
+/// the failure.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The directory cannot be created
+/// - The directory is not writable (permission denied, read-only filesystem, etc.)
 #[instrument(level = "info", skip_all, fields(path = %path))]
 pub async fn ensure_writable_dir(path: &str) -> Result<(), Box<dyn Error>> {
     if let Err(e) = fs::create_dir_all(path).await {

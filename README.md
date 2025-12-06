@@ -32,25 +32,6 @@ An API example is available at [news.awfulsec.com/api/2025-05-08/morning.json](h
 
 [Install Rust.](https://www.rust-lang.org/tools/install)
 
-[Install Conda.](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html#regular-installation)
-
-Install Python 3.11.0 and Pytorch.
-
-```sh
-conda install -c conda-forge python=3.11.0
-conda install pytorch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 -c pytorch
-```
-
-Add the Pytorch libraries to your load path and instruct `sys-torch` to use Pytorch with an env variable.
-
-```sh
-export LIBTORCH=$HOME/miniconda3/lib/python3.11/site-packages/torch
-export LD_LIBRARY_PATH=${LIBTORCH}/lib:$LD_LIBRARY_PATH
-export LIBTORCH_USE_PYTORCH=1
-```
-
-*Note: LD_LIBRARY_PATH is DYLD_LIBRARY_PATH on MacOS*
-
 ```sh
 cargo install awful_text_news
 ```

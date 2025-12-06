@@ -1,3 +1,20 @@
+//! New York Times article scraper.
+//!
+//! This module fetches articles from The New York Times using their
+//! official [Top Stories API](https://developer.nytimes.com/docs/top-stories-product/1/overview).
+//!
+//! # API Key Required
+//!
+//! This scraper requires a NYT API key, which can be obtained for free at:
+//! <https://developer.nytimes.com/>
+//!
+//! Set via `--nyt-api-key` flag or `NYT_API_KEY` environment variable.
+//!
+//! # Content Fetching
+//!
+//! Since NYT articles are paywalled, this scraper uses a proxy service
+//! (accessarticlenow.com) to fetch the full article content.
+
 use crate::models::NewsArticle;
 use futures::stream::{self, StreamExt};
 use once_cell::sync::Lazy;
@@ -8,7 +25,7 @@ use std::error::Error;
 use std::time::Duration;
 use tracing::{debug, error, info, instrument, warn};
 
-// Global HTTP client with realistic UA + timeouts
+/// Global HTTP client with browser-like User-Agent and sensible timeouts.
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     Client::builder()
         .user_agent(concat!(

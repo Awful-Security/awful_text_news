@@ -1,3 +1,21 @@
+//! AP News article scraper.
+//!
+//! This module discovers AP News articles via Google News search and fetches
+//! their content. Unlike other scrapers, AP News doesn't have a simple text-only
+//! version, so we use Google search to find recent articles.
+//!
+//! # Discovery Method
+//!
+//! Uses Google News search with:
+//! - `site:apnews.com inurl:article` - Only AP News article pages
+//! - `tbm=nws` - News vertical
+//! - `qdr:d` - Last 24 hours only
+//!
+//! # Anti-bot Handling
+//!
+//! Google may occasionally show CAPTCHA or consent pages. The scraper logs
+//! warnings when this is detected but continues with whatever results are found.
+
 use crate::models::NewsArticle;
 use futures::stream::{self, StreamExt};
 use once_cell::sync::Lazy;
@@ -7,11 +25,10 @@ use std::error::Error;
 use std::time::Duration;
 use tracing::{debug, error, info, instrument, warn};
 
-// --- New: date parsing helpers
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 
-// Global HTTP client with realistic UA + timeouts
+/// Global HTTP client with browser-like User-Agent and sensible timeouts.
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     Client::builder()
         .user_agent(concat!(
@@ -26,7 +43,20 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         .expect("failed to build reqwest client")
 });
 
-/// Index AP News articles via Google search (last 24 hours)
+/// Index AP News articles via Google News search (last 24 hours).
+///
+/// Searches Google News for recent AP News articles and extracts up to 20
+/// unique article URLs.
+///
+/// # Returns
+///
+/// A vector of AP News article URLs, or an error if the search fails.
+///
+/// # Notes
+///
+/// - Results are limited to 20 articles to avoid overwhelming the system
+/// - Duplicate URLs are automatically filtered
+/// - May return fewer results if Google shows anti-bot interstitials
 #[instrument(level = "info")]
 pub async fn index_articles() -> Result<Vec<String>, Box<dyn Error>> {
     // Use News vertical (tbm=nws) + last 24h (qdr:d) + more results to dedupe later

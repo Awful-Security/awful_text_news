@@ -1,7 +1,28 @@
+//! Command-line interface definitions for Awful Text News.
+//!
+//! This module defines the CLI arguments and options using the `clap` crate.
+//! All arguments can be provided via command-line flags or environment variables.
+
 use clap::Parser;
 
-/// Main program to scrape and analyze news articles
-/// from CNN and NPR, outputting JSON/API files and markdown reports.
+/// Command-line arguments for the Awful Text News application.
+///
+/// This struct defines all configuration options that can be passed to the
+/// application at runtime. Options include output directories, API keys,
+/// and message bus configuration.
+///
+/// # Examples
+///
+/// ```sh
+/// # Basic usage with required arguments
+/// awful_text_news -j ./json -m ./markdown
+///
+/// # With NYT API key
+/// awful_text_news -j ./json -m ./markdown --nyt-api-key YOUR_KEY
+///
+/// # With message bus enabled
+/// awful_text_news -j ./json -m ./markdown --amqp-url amqp://localhost:5672
+/// ```
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 pub struct Cli {
@@ -20,6 +41,14 @@ pub struct Cli {
     /// New York Times API key
     #[arg(long, env = "NYT_API_KEY")]
     pub nyt_api_key: Option<String>,
+
+    /// AMQP URL for message bus (optional, enables event publishing)
+    #[arg(long, env = "AMQP_URL")]
+    pub amqp_url: Option<String>,
+
+    /// Message bus exchange name
+    #[arg(long, env = "MESSAGE_BUS_EXCHANGE", default_value = "events")]
+    pub message_bus_exchange: String,
 }
 
 #[cfg(test)]

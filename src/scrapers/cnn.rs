@@ -1,3 +1,14 @@
+//! CNN Lite article scraper.
+//!
+//! This module scrapes articles from [CNN Lite](https://lite.cnn.com), a text-only
+//! version of CNN designed for low-bandwidth connections. This makes it ideal
+//! for scraping as the HTML is minimal and consistent.
+//!
+//! # URL Pattern
+//!
+//! Articles are linked from the homepage with relative URLs that are resolved
+//! to absolute URLs like `https://lite.cnn.com/2025/05/06/article-slug`.
+
 use crate::models::NewsArticle;
 use futures::stream::{self, StreamExt};
 use reqwest::get;
@@ -6,7 +17,14 @@ use std::error::Error;
 use tracing::{debug, error, info, instrument, warn};
 use url::Url;
 
-/// Index CNN Lite homepage to extract article URLs
+/// Index CNN Lite homepage to extract article URLs.
+///
+/// Scrapes the CNN Lite homepage and extracts all article links from elements
+/// matching `.card--lite a[href]`.
+///
+/// # Returns
+///
+/// A vector of absolute article URLs, or an error if the homepage fetch fails.
 #[instrument(level = "info")]
 pub async fn index_articles() -> Result<Vec<String>, Box<dyn Error>> {
     let cnn_page_url = "https://lite.cnn.com";
@@ -35,7 +53,18 @@ pub async fn index_articles() -> Result<Vec<String>, Box<dyn Error>> {
     Ok(article_urls)
 }
 
-/// Fetch all CNN articles concurrently
+/// Fetch all CNN articles concurrently.
+///
+/// Downloads and parses article content from each URL. Failed fetches are
+/// logged and skipped without failing the entire batch.
+///
+/// # Arguments
+///
+/// * `urls` - Vector of article URLs to fetch
+///
+/// # Returns
+///
+/// A vector of successfully fetched [`NewsArticle`] objects.
 #[instrument(level = "info", skip_all)]
 pub async fn fetch_articles(urls: Vec<String>) -> Vec<NewsArticle> {
     let articles: Vec<NewsArticle> = stream::iter(urls.clone())

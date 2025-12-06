@@ -1,8 +1,49 @@
+//! Markdown output generation for human-readable news digests.
+//!
+//! This module converts processed articles into well-formatted Markdown
+//! suitable for reading directly or rendering in mdBook.
+//!
+//! # Output Format
+//!
+//! Articles are grouped by category (alphabetically) and include:
+//! - Title with source tag
+//! - Publication date/time
+//! - Summary
+//! - Key takeaways
+//! - Named entities with descriptions
+//! - Important dates and timeframes
+//! - Topic tags
+//!
+//! # Example Output
+//!
+//! ```markdown
+//! # Awful Times
+//! #### Edition published at 14:30:00
+//!
+//! # Politics & Governance
+//!
+//! ## Breaking News Story - <small>`cnn`</small>
+//! - [source](https://lite.cnn.com/...)
+//! - _Published: 2025-05-06 12:00:00_
+//! ...
+//! ```
+
 use crate::models::FrontPage;
 use std::fmt::Write;
 use tracing::{debug, instrument};
 
-/// Convert a FrontPage to Markdown format
+/// Convert a [`FrontPage`] to Markdown format.
+///
+/// Generates a complete Markdown document with all articles grouped by
+/// category, including full metadata (entities, dates, takeaways, etc.).
+///
+/// # Arguments
+///
+/// * `front_page` - The processed articles to render
+///
+/// # Returns
+///
+/// A Markdown string ready for writing to a file or rendering.
 #[instrument(level = "debug", skip_all)]
 pub fn front_page_to_markdown(front_page: &FrontPage) -> String {
     let mut md = String::new();

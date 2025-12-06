@@ -1,3 +1,20 @@
+//! Index file management for navigation.
+//!
+//! This module manages various index files that enable navigation between
+//! editions in the Markdown output:
+//!
+//! # Index Files
+//!
+//! - **Date TOC** (`2025-05-06.md`): Lists all editions for a single day
+//!   with links to individual articles within each edition
+//! - **SUMMARY.md**: mdBook navigation file with hierarchical structure
+//! - **daily_news.md**: Master index of all dates and editions
+//!
+//! # Append vs Replace
+//!
+//! All functions in this module use append semantics to support multiple
+//! executions per day (morning, afternoon, evening editions).
+
 use crate::models::FrontPage;
 use crate::utils::{slugify_title, upcase};
 use std::error::Error;
@@ -7,7 +24,21 @@ use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tracing::{info, instrument};
 
-/// Update the date-specific table of contents file
+/// Update the date-specific table of contents file.
+///
+/// Appends the current edition to a date-specific TOC file that lists all
+/// editions and articles for that day. Creates the file if it doesn't exist.
+///
+/// # Arguments
+///
+/// * `markdown_output_dir` - Directory containing Markdown files
+/// * `front_page` - The processed articles for this edition
+/// * `markdown_filename` - Filename of the edition Markdown file
+///
+/// # Output
+///
+/// Appends to `{markdown_output_dir}/{date}.md` with edition links and
+/// article listings grouped by category.
 #[instrument(level = "info", skip_all, fields(%markdown_output_dir, date = %front_page.local_date, file = %markdown_filename))]
 pub async fn update_date_toc_file(
     markdown_output_dir: &str,
@@ -81,7 +112,25 @@ pub async fn update_date_toc_file(
     Ok(())
 }
 
-/// Update the SUMMARY.md file for mdBook navigation
+/// Update the SUMMARY.md file for mdBook navigation.
+///
+/// Adds entries to the mdBook SUMMARY.md file to enable navigation to the
+/// new edition. Creates a default SUMMARY.md structure if the file doesn't exist.
+///
+/// # Arguments
+///
+/// * `markdown_output_dir` - Directory containing Markdown files
+/// * `front_page` - The processed articles for this edition
+/// * `markdown_filename` - Filename of the edition Markdown file
+///
+/// # Structure
+///
+/// Entries are added under the "Daily News" section with hierarchical nesting:
+/// ```text
+/// - [Daily News](./daily_news.md)
+///     - [2025-05-06](./2025-05-06.md)
+///         - [Morning](./2025-05-06_morning.md)
+/// ```
 #[instrument(level = "info", skip_all, fields(%markdown_output_dir, date = %front_page.local_date, file = %markdown_filename))]
 pub async fn update_summary_md(
     markdown_output_dir: &str,
@@ -144,7 +193,27 @@ pub async fn update_summary_md(
     Ok(())
 }
 
-/// Update the daily_news.md index file
+/// Update the daily_news.md master index file.
+///
+/// Adds entries to the master daily news index that lists all dates and
+/// editions. Creates the file with a header if it doesn't exist.
+///
+/// # Arguments
+///
+/// * `markdown_output_dir` - Directory containing Markdown files
+/// * `front_page` - The processed articles for this edition
+/// * `markdown_filename` - Filename of the edition Markdown file
+///
+/// # Structure
+///
+/// Entries are organized by date with nested edition links:
+/// ```text
+/// # Awful News Index
+///
+/// - [**2025-05-06**](./2025-05-06.md)
+///     - [Morning](./2025-05-06_morning.md)
+///     - [Evening](./2025-05-06_evening.md)
+/// ```
 #[instrument(level = "info", skip_all, fields(%markdown_output_dir, date = %front_page.local_date, file = %markdown_filename))]
 pub async fn update_daily_news_index(
     markdown_output_dir: &str,

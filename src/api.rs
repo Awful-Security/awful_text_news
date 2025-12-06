@@ -1,3 +1,23 @@
+//! LLM API interaction with exponential backoff retry logic.
+//!
+//! This module provides a robust interface for communicating with an
+//! OpenAI-compatible LLM API. It includes automatic retry logic with
+//! exponential backoff and jitter to handle transient failures gracefully.
+//!
+//! # Architecture
+//!
+//! The module uses a trait-based design for flexibility:
+//! - [`AskAsync`]: Core trait defining async LLM interaction
+//! - [`AskFnWrapper`]: Wraps the `awful_aj` library's `ask` function
+//! - [`RetryAsk`]: Decorator that adds retry logic to any `AskAsync` implementation
+//!
+//! # Retry Strategy
+//!
+//! - Maximum 5 retry attempts
+//! - Exponential backoff starting at 1 second
+//! - Maximum delay capped at 30 seconds
+//! - Random jitter (0-250ms) added to prevent thundering herd
+
 use awful_aj::api::ask;
 use awful_aj::{config::AwfulJadeConfig, template::ChatTemplate};
 use rand::{rng, Rng};
@@ -7,17 +27,46 @@ use std::time::{Duration as StdDuration, Instant};
 use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
-/// Trait for async LLM interaction
+/// Trait for async LLM interaction.
+///
+/// Implementors of this trait can send text to an LLM and receive a response.
+/// This abstraction allows for different LLM backends or decorators (like retry logic).
 pub trait AskAsync {
+    /// The type of response returned by the LLM.
     type Response;
+
+    /// Send text to the LLM and receive a response.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The input text to send to the LLM
+    ///
+    /// # Returns
+    ///
+    /// The LLM's response, or an error if the request failed.
     async fn ask(&self, text: &str) -> Result<Self::Response, Box<dyn Error>>;
 }
 
-/// Wrapper that adds exponential backoff retry logic to any AskAsync implementation
+/// Wrapper that adds exponential backoff retry logic to any [`AskAsync`] implementation.
+///
+/// This decorator transparently adds retry logic with exponential backoff
+/// and jitter to handle transient API failures. It's designed to be resilient
+/// against rate limiting, network issues, and temporary server errors.
+///
+/// # Backoff Strategy
+///
+/// The delay between retries follows this formula:
+/// ```text
+/// delay = min(base_delay * 2^(attempt-1), max_delay) + random_jitter(0..250ms)
+/// ```
 pub struct RetryAsk<T> {
+    /// The underlying LLM client to wrap.
     inner: T,
+    /// Maximum number of retry attempts before giving up.
     max_retries: usize,
+    /// Initial delay between retries (doubles with each attempt).
     base_delay: StdDuration,
+    /// Maximum delay cap to prevent excessive waiting.
     max_delay: StdDuration,
 }
 
@@ -25,6 +74,20 @@ impl<T> RetryAsk<T>
 where
     T: AskAsync,
 {
+    /// Create a new retry wrapper around an existing [`AskAsync`] implementation.
+    ///
+    /// # Arguments
+    ///
+    /// * `inner` - The underlying LLM client to wrap
+    /// * `max_retries` - Maximum number of retry attempts (5 recommended)
+    /// * `base_delay` - Initial delay between retries (1 second recommended)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let client = AskFnWrapper { config, template };
+    /// let retry_client = RetryAsk::new(client, 5, Duration::from_secs(1));
+    /// ```
     pub fn new(inner: T, max_retries: usize, base_delay: StdDuration) -> Self {
         Self {
             inner,
@@ -103,10 +166,20 @@ where
     }
 }
 
-/// Wrapper around awful_aj::api::ask that implements AskAsync
+/// Wrapper around `awful_aj::api::ask` that implements [`AskAsync`].
+///
+/// This struct adapts the `awful_aj` library's `ask` function to work with
+/// the [`AskAsync`] trait, enabling it to be used with [`RetryAsk`] and
+/// other decorators.
+///
+/// # Lifetime Parameters
+///
+/// * `'a` - The lifetime of the references to config and template
 #[derive(Debug)]
 pub struct AskFnWrapper<'a> {
+    /// Reference to the LLM configuration (API keys, endpoints, model settings).
     pub config: &'a AwfulJadeConfig,
+    /// Reference to the chat template defining the conversation structure.
     pub template: &'a ChatTemplate,
 }
 
@@ -127,7 +200,28 @@ impl<'a> AskAsync for AskFnWrapper<'a> {
     }
 }
 
-/// High-level function to call LLM with exponential backoff retry logic
+/// High-level function to call LLM with exponential backoff retry logic.
+///
+/// This is the primary entry point for sending article content to the LLM.
+/// It automatically wraps the request with retry logic to handle transient
+/// failures gracefully.
+///
+/// # Arguments
+///
+/// * `config` - LLM configuration (API endpoint, model, etc.)
+/// * `article` - The article text to process
+/// * `template` - The chat template defining the conversation structure
+///
+/// # Returns
+///
+/// The LLM's response as a JSON string containing the processed article data,
+/// or an error if all retry attempts fail.
+///
+/// # Retry Behavior
+///
+/// - Up to 5 retry attempts
+/// - Exponential backoff: 1s, 2s, 4s, 8s, 16s (capped at 30s)
+/// - Random jitter added to prevent thundering herd
 #[instrument(level = "info", skip_all)]
 pub async fn ask_with_backoff(
     config: &AwfulJadeConfig,
