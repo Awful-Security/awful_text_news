@@ -42,11 +42,11 @@ pub struct Cli {
     #[arg(long, env = "NYT_API_KEY")]
     pub nyt_api_key: Option<String>,
 
-    /// AMQP URL for message bus (optional, enables event publishing)
+    /// AMQP URL for message bus (optional, enables event publishing when `publish` feature is enabled)
     #[arg(long, env = "AMQP_URL")]
     pub amqp_url: Option<String>,
 
-    /// Message bus exchange name
+    /// Message bus exchange name (only used when `publish` feature is enabled)
     #[arg(long, env = "MESSAGE_BUS_EXCHANGE", default_value = "events")]
     pub message_bus_exchange: String,
 }

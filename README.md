@@ -36,6 +36,20 @@ An API example is available at [news.awfulsec.com/api/2025-05-08/morning.json](h
 cargo install awful_text_news
 ```
 
+### Optional Features
+
+- **`publish`**: Enables event publishing to a RabbitMQ message bus via the `awful_publish` crate. This is a private dependency and not available to public users. When enabled, the application publishes lifecycle events (startup, indexing, fetching, processing, output writing, completion) to the configured AMQP exchange.
+
+```sh
+# Install with event publishing support (requires access to private repo)
+cargo install awful_text_news --features publish
+
+# Run with event publishing
+awful_text_news -j ./json -m ./markdown --amqp-url amqp://localhost:5672
+```
+
+The `--amqp-url` and `--message-bus-exchange` CLI flags are always available but only function when the `publish` feature is enabled.
+
 ## Configuration
 
 The important configuration options in `config.yaml` to adjust are:

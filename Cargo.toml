@@ -10,9 +10,13 @@ readme = "README.md"
 homepage = "https://github.com/graves/awful_text_news"
 keywords = ["openai", "qwen", "cli", "markdown", "mdBook"]
 
+[features]
+default = []
+publish = ["dep:awful_publish"]
+
 [dependencies]
 awful_aj = { version = "0.3.10", git = "https://github.com/graves/awful_aj" }
-awful_publish = { git = "ssh://git@github.com/Awful-Security/awful_publish.git" }
+awful_publish = { git = "ssh://git@github.com/Awful-Security/awful_publish.git", optional = true }
 tokio = { version = "1.33.0", features = ["full"] }
 futures = "0.3.31"
 chrono = "0.4.42"

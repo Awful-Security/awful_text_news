@@ -28,7 +28,6 @@
 //! 4. **Output**: Write JSON API files and Markdown reports
 
 use awful_aj::{config, config_dir, template};
-use awful_publish::BusConfig;
 use chrono::Local;
 use clap::Parser;
 use itertools::Itertools;
@@ -40,6 +39,7 @@ mod api;
 mod cli;
 mod models;
 mod outputs;
+mod publish;
 mod scrapers;
 mod utils;
 
@@ -70,17 +70,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     debug!(?args.json_output_dir, ?args.markdown_output_dir, "Parsed CLI arguments");
 
     // --- Initialize message bus (if configured) ---
-    if let Some(ref amqp_url) = args.amqp_url {
-        let bus_config = BusConfig::new(amqp_url.clone(), args.message_bus_exchange.clone());
-        if let Err(e) = awful_publish::init_global(bus_config).await {
-            warn!(error = %e, "Failed to initialize message bus; continuing without event publishing");
-        } else {
-            info!(exchange = %args.message_bus_exchange, "Message bus initialized");
-        }
-    }
+    publish::init(args.amqp_url.as_ref(), &args.message_bus_exchange).await;
 
     // Publish startup event
-    awful_publish::info!(
+    publish_info!(
         "awful_text_news",
         event_kind = "application.started",
         version = env!("CARGO_PKG_VERSION"),
@@ -94,7 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             error = %e,
             "JSON output directory is not writable (fix perms or choose a different path)"
         );
-        awful_publish::error!(
+        publish_error!(
             "awful_text_news",
             event_kind = "application.failed",
             reason = "directory_not_writable",
@@ -105,7 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // ---- Index and fetch articles ----
-    awful_publish::info!(
+    publish_info!(
         "awful_text_news",
         event_kind = "indexing.started",
         "Starting article indexing from all sources"
@@ -118,9 +111,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let bbcnews_urls = scrapers::bbcnews::index_articles().await?;
     let nyt_articles_with_titles = scrapers::nyt::index_articles(args.nyt_api_key.as_deref()).await?;
 
+    #[allow(unused_variables)]
     let total_indexed = cnn_urls.len() + npr_urls.len() + apnews_urls.len()
         + aljazeera_urls.len() + bbcnews_urls.len() + nyt_articles_with_titles.len();
-    awful_publish::info!(
+    publish_info!(
         "awful_text_news",
         event_kind = "indexing.completed",
         total_urls = total_indexed,
@@ -133,7 +127,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "Article indexing completed"
     );
 
-    awful_publish::info!(
+    publish_info!(
         "awful_text_news",
         event_kind = "fetching.started",
         "Starting article content fetching"
@@ -146,13 +140,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let bbcnews_articles = scrapers::bbcnews::fetch_articles(bbcnews_urls).await;
     let nyt_articles = scrapers::nyt::fetch_articles(nyt_articles_with_titles).await;
 
-    // Capture per-source counts before flattening
-    let cnn_fetched = cnn_articles.len();
-    let npr_fetched = npr_articles.len();
-    let apnews_fetched = apnews_articles.len();
-    let aljazeera_fetched = aljazeera_articles.len();
-    let bbcnews_fetched = bbcnews_articles.len();
-    let nyt_fetched = nyt_articles.len();
+    // Capture per-source counts before flattening (used by publish feature)
+    #[allow(unused_variables)]
+    let (cnn_fetched, npr_fetched, apnews_fetched, aljazeera_fetched, bbcnews_fetched, nyt_fetched) = (
+        cnn_articles.len(),
+        npr_articles.len(),
+        apnews_articles.len(),
+        aljazeera_articles.len(),
+        bbcnews_articles.len(),
+        nyt_articles.len(),
+    );
 
     let articles = vec![cnn_articles, npr_articles, apnews_articles, aljazeera_articles, bbcnews_articles, nyt_articles]
         .into_iter()
@@ -160,7 +157,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .collect::<Vec<_>>();
     info!(count = articles.len(), "Total articles to analyze");
 
-    awful_publish::info!(
+    publish_info!(
         "awful_text_news",
         event_kind = "fetching.completed",
         total_articles = articles.len(),
@@ -180,7 +177,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let config_path = conf_file.to_str().expect("Not a valid config filename");
     let config = config::load_config(config_path).unwrap();
     info!(config_path, "Loaded configuration");
-    
+
     // Wrap config and template in Arc for sharing across parallel tasks
     use std::sync::Arc;
     let config = Arc::new(config);
@@ -204,14 +201,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let total_articles = articles.len();
     info!(parallel_batch_size = PARALLEL_BATCH_SIZE, "Starting parallel article processing");
 
-    awful_publish::info!(
+    publish_info!(
         "awful_text_news",
         event_kind = "processing.started",
         total_articles = total_articles,
         batch_size = PARALLEL_BATCH_SIZE,
         "Starting article processing"
     );
-    
+
     // Process articles concurrently
     let results: Vec<Option<AwfulNewsArticle>> = stream::iter(articles.iter().enumerate())
         .map(|(i, article)| {
@@ -297,7 +294,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for result in results.into_iter().flatten() {
         front_page.articles.push(result);
     }
-    
+
     let successful_count = front_page.articles.len();
     let failed_count = total_articles - successful_count;
     info!(
@@ -307,7 +304,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "Completed parallel article processing"
     );
 
-    awful_publish::info!(
+    publish_info!(
         "awful_text_news",
         event_kind = "processing.completed",
         total_articles = total_articles,
@@ -317,20 +314,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     // Write final JSON after all articles processed
-    awful_publish::info!(
+    publish_info!(
         "awful_text_news",
         event_kind = "output.json.started",
         "Writing JSON output"
     );
     if let Err(e) = json::write_frontpage(&front_page, &args.json_output_dir).await {
         error!(error = %e, "Failed to write final JSON");
-        awful_publish::error!(
+        publish_error!(
             "awful_text_news",
             event_kind = "output.json.failed",
             "Failed to write JSON output"
         );
     } else {
-        awful_publish::info!(
+        publish_info!(
             "awful_text_news",
             event_kind = "output.json.completed",
             article_count = front_page.articles.len(),
@@ -346,14 +343,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     info!(path = %output_markdown_filename, "Writing Markdown");
-    awful_publish::info!(
+    publish_info!(
         "awful_text_news",
         event_kind = "output.markdown.started",
         "Writing Markdown output"
     );
     if let Err(e) = tokio::fs::write(&output_markdown_filename, md).await {
         error!(path = %output_markdown_filename, error = %e, "Failed writing Markdown");
-        awful_publish::error!(
+        publish_error!(
             "awful_text_news",
             event_kind = "output.markdown.failed",
             path = %output_markdown_filename,
@@ -361,7 +358,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         );
     } else {
         info!(path = %output_markdown_filename, "Wrote FrontPage Markdown");
-        awful_publish::info!(
+        publish_info!(
             "awful_text_news",
             event_kind = "output.markdown.completed",
             path = %output_markdown_filename,
@@ -371,7 +368,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // ---- Index updates ----
     let markdown_filename = format!("{}_{}.md", front_page.local_date, front_page.time_of_day);
-    
+
     if let Err(e) = indexes::update_date_toc_file(
         &args.markdown_output_dir,
         &front_page,
@@ -410,7 +407,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "Execution complete"
     );
 
-    awful_publish::info!(
+    publish_info!(
         "awful_text_news",
         event_kind = "application.completed",
         duration_secs = elapsed.as_secs(),
