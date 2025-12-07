@@ -189,7 +189,7 @@ impl<'a> AskAsync for AskFnWrapper<'a> {
     #[instrument(level = "info", skip_all)]
     async fn ask(&self, text: &str) -> Result<Self::Response, Box<dyn Error>> {
         let t0 = Instant::now();
-        let res = ask(self.config, text.to_string(), self.template, None, None).await;
+        let res = ask(self.config, text.to_string(), self.template, None, None, false).await;
         let dt = t0.elapsed();
 
         match &res {
