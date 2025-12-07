@@ -15,10 +15,10 @@
 //!
 //! # Non-Intrusive Design
 //!
-//! This module uses `awful_publish::init_global()` for initialization and
-//! `awful_publish::publish()` for sending events. The `publish()` function
-//! sends events directly to RabbitMQ without going through the tracing subscriber,
-//! ensuring no interference with the application's existing logging setup.
+//! This module uses `awful_publish::init()` for initialization and
+//! `awful_publish::publish()` for sending events. Using `init()` (not `init_global()`)
+//! ensures no tracing subscriber is installed, avoiding conflicts with the
+//! application's existing logging setup.
 //!
 //! # Events Published
 //!
@@ -99,7 +99,9 @@ pub async fn init(amqp_url: Option<&String>, exchange: &str) -> bool {
 
     if let Some(url) = amqp_url {
         let config = BusConfig::new(url.clone(), exchange.to_string());
-        if let Err(e) = awful_publish::init_global(config).await {
+        // Use init() instead of init_global() to avoid setting a tracing subscriber
+        // (the application already has its own tracing setup)
+        if let Err(e) = awful_publish::init(config).await {
             warn!(error = %e, "Failed to initialize message bus; continuing without event publishing");
             false
         } else {
