@@ -444,11 +444,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "awful_bus_common"
+version = "0.1.0"
+source = "git+ssh://git@github.com/Awful-Security/awful_bus.git#4a406e83b71597e76fcd33be690598d1a0877232"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "awful_publish"
 version = "0.1.0"
-source = "git+ssh://git@github.com/Awful-Security/awful_publish.git#59af4e4cb9041cd01fe3688eb4b2de38d5960667"
+source = "git+ssh://git@github.com/Awful-Security/awful_bus.git#4a406e83b71597e76fcd33be690598d1a0877232"
 dependencies = [
  "anyhow",
+ "awful_bus_common",
  "chrono",
  "clap",
  "hostname",
